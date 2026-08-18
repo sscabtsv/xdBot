@@ -8,7 +8,7 @@
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 
-#include <deque>
+#include <vector>
 $execute {
     auto* mod = Mod::get();
     geode::listenForSettingChanges<std::string>("macro_accuracy", +[](std::string value) {
@@ -180,7 +180,7 @@ class $modify(BGLHook, GJBaseGameLayer) {
     };
 
     struct Fields {
-        std::deque<PendingMacroInput> pendingMacroInputs;
+        std::vector<PendingMacroInput> pendingMacroInputs;
     };
 
     void processQueuedButtons(float dt, bool clearInputQueue) {
@@ -228,8 +228,8 @@ class $modify(BGLHook, GJBaseGameLayer) {
         // Entries should always be consumed within the same tick they're
         // queued; if this ever grows past that, something desynced (e.g. a
         // death interrupted a queued button before it fired) - clear it
-        // rather than let a stale front entry block correct matching for
-        // every input from here on.
+        // rather than let stale entries pile up and risk matching against
+        // the wrong one indefinitely.
         if (m_fields->pendingMacroInputs.size() > 32)
             m_fields->pendingMacroInputs.clear();
 
@@ -330,10 +330,15 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
         if (bot.state == state::playing) {
             auto& pending = m_fields->pendingMacroInputs;
-            bool isMacroInput = !pending.empty() && pending.front().button == button &&
-                                 pending.front().down == hold && pending.front().player2 == player2;
-            if (isMacroInput)
-                pending.pop_front();
+            bool isMacroInput = false;
+            for (size_t i = 0; i < pending.size(); i++) {
+                if (pending[i].button == button && pending[i].down == hold &&
+                    pending[i].player2 == player2) {
+                    pending.erase(pending.begin() + static_cast<ptrdiff_t>(i));
+                    isMacroInput = true;
+                    break;
+                }
+            }
 
             if (bot.mod->getSavedValue<bool>("macro_ignore_inputs") && !isMacroInput)
                 return;
