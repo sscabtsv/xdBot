@@ -7,8 +7,6 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
-
-#include <vector>
 $execute {
     auto* mod = Mod::get();
     geode::listenForSettingChanges<std::string>("macro_accuracy", +[](std::string value) {
@@ -173,14 +171,9 @@ class $modify(PlayLayer) {
 
 class $modify(BGLHook, GJBaseGameLayer) {
 
-    struct PendingMacroInput {
-        int button;
-        bool down;
-        bool player2;
-    };
-
     struct Fields {
-        std::vector<PendingMacroInput> pendingMacroInputs;
+        bool macroInput = false;
+        size_t queuedMacroInputs = 0;
     };
 
     void processQueuedButtons(float dt, bool clearInputQueue) {
@@ -222,16 +215,6 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
         if (bot.state == state::playing)
             handlePlaying(frame);
-        else if (!m_fields->pendingMacroInputs.empty())
-            m_fields->pendingMacroInputs.clear();
-
-        // Entries should always be consumed within the same tick they're
-        // queued; if this ever grows past that, something desynced (e.g. a
-        // death interrupted a queued button before it fired) - clear it
-        // rather than let stale entries pile up and risk matching against
-        // the wrong one indefinitely.
-        if (m_fields->pendingMacroInputs.size() > 32)
-            m_fields->pendingMacroInputs.clear();
 
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
@@ -264,13 +247,15 @@ class $modify(BGLHook, GJBaseGameLayer) {
             return;
         }
 
+        m_fields->macroInput = true;
+
         while (bot.currentAction < bot.replay.inputs.size() &&
                frame >= bot.replay.inputs[bot.currentAction].frame) {
             auto input = bot.replay.inputs[bot.currentAction];
             if (frame != bot.respawnFrame) {
                 input.player2 = !input.player2;
 
-                m_fields->pendingMacroInputs.push_back({input.button, input.down, input.player2});
+                m_fields->queuedMacroInputs++;
                 queueButton(input.button, input.down, input.player2, 0.0);
             }
             bot.currentAction++;
@@ -278,6 +263,7 @@ class $modify(BGLHook, GJBaseGameLayer) {
         }
 
         bot.respawnFrame = -1;
+        m_fields->macroInput = false;
 
         if (bot.currentAction == bot.replay.inputs.size()) {
             if (bot.stopPlaying) {
@@ -329,18 +315,12 @@ class $modify(BGLHook, GJBaseGameLayer) {
             return GJBaseGameLayer::handleButton(hold, button, player2);
 
         if (bot.state == state::playing) {
-            auto& pending = m_fields->pendingMacroInputs;
-            bool isMacroInput = false;
-            for (size_t i = 0; i < pending.size(); i++) {
-                if (pending[i].button == button && pending[i].down == hold &&
-                    pending[i].player2 == player2) {
-                    pending.erase(pending.begin() + static_cast<ptrdiff_t>(i));
-                    isMacroInput = true;
-                    break;
-                }
-            }
+            bool queuedMacroInput = m_fields->queuedMacroInputs > 0;
+            if (queuedMacroInput)
+                m_fields->queuedMacroInputs--;
 
-            if (bot.mod->getSavedValue<bool>("macro_ignore_inputs") && !isMacroInput)
+            if (bot.mod->getSavedValue<bool>("macro_ignore_inputs") && !m_fields->macroInput &&
+                !queuedMacroInput)
                 return;
 
             return GJBaseGameLayer::handleButton(hold, button, player2);
