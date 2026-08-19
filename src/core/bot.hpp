@@ -147,8 +147,7 @@ class Bot {
     int showcaseAttemptsLeft = -1;
     int showcaseTargetFrame = -1;
     bool showcaseTriggered = false;
-    int showcaseReleaseFrame = -1;
-    int showcaseNextRetryFrame = -1;
+    bool showcaseHolding = false;
     int showcaseGiveUpFrame = -1;
 
     bool tpsEnabled = false;
