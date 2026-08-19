@@ -338,10 +338,19 @@ class $modify(BGLHook, GJBaseGameLayer) {
         }
     }
 
-    // Attempts Showcase: inserts an extra jump tap that isn't part of the
+    // Attempts Showcase: inserts extra jump input that isn't part of the
     // macro, timed to land near the attempt's randomly chosen target
     // percent. A no-op whenever the feature is off, since
     // showcaseTargetFrame stays -1 in that case (see Bot::showcaseBeginAttempt).
+    //
+    // A single brief tap is enough to kill in most cube/ball/robot/spider
+    // sections, where any mistimed jump near an obstacle is fatal - but
+    // trajectory-based modes (wave/ship/ufo) can easily absorb one small
+    // blip in a wide corridor. So instead of one tap, this mashes jump
+    // repeatedly - each press reinforced before the last one's effect can
+    // fully settle back onto the macro's line - until either the player
+    // dies or a few seconds pass without it mattering, at which point it
+    // gives up and lets the attempt continue normally.
     void handleShowcase(int frame) {
         auto& bot = Bot::get();
 
@@ -352,27 +361,24 @@ class $modify(BGLHook, GJBaseGameLayer) {
             m_fields->queuedMacroInputs++;
             queueButton(1, false, false, 0.0);
             bot.showcaseReleaseFrame = -1;
+            bot.showcaseNextRetryFrame = frame + 6;
         }
 
         bool dueForFirstTrigger = !bot.showcaseTriggered && frame >= bot.showcaseTargetFrame;
-        bool dueForRetry = bot.showcaseTriggered && bot.showcaseRetriesLeft > 0 &&
-                            bot.showcaseReleaseFrame < 0 && frame >= bot.showcaseNextRetryFrame;
+        bool dueForRetry = bot.showcaseTriggered && bot.showcaseReleaseFrame < 0 &&
+                            frame < bot.showcaseGiveUpFrame && frame >= bot.showcaseNextRetryFrame;
 
         if (!dueForFirstTrigger && !dueForRetry)
             return;
 
-        if (dueForFirstTrigger)
+        if (dueForFirstTrigger) {
             bot.showcaseTriggered = true;
-        else
-            bot.showcaseRetriesLeft--;
+            bot.showcaseGiveUpFrame = frame + 500;
+        }
 
-        // A brief, natural-feeling tap: press now, release a handful of
-        // frames later - not a scripted kill, just an extra click the
-        // macro never intended that GD's own physics resolves normally.
         m_fields->queuedMacroInputs++;
         queueButton(1, true, false, 0.0);
-        bot.showcaseReleaseFrame = frame + 4;
-        bot.showcaseNextRetryFrame = frame + 45;
+        bot.showcaseReleaseFrame = frame + 10;
     }
 
     void handleButton(bool hold, int button, bool player2) {
