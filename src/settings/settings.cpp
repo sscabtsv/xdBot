@@ -157,6 +157,11 @@ void Settings::loadRuntimeState(Bot& bot) {
     bot.lockDeltaUseVisualUpdates = mod->getSettingValue<bool>("lock_delta_use_visual_updates");
     bot.stopPlaying = mod->getSettingValue<bool>("auto_stop_playing");
 
+    bot.showcaseEnabled = mod->getSettingValue<bool>("attempts_showcase");
+    bot.showcaseMinPercent = mod->getSettingValue<double>("attempts_showcase_min_percent");
+    bot.showcaseMaxPercent = mod->getSettingValue<double>("attempts_showcase_max_percent");
+    bot.showcaseCount = static_cast<int>(mod->getSettingValue<int64_t>("attempts_showcase_count"));
+
     std::string accuracy = mod->getSettingValue<std::string>("macro_accuracy");
     bot.frameFixes = accuracy == "Frame Fixes";
     bot.inputFixes = accuracy == "Input Fixes";
