@@ -77,6 +77,8 @@ class Bot {
 
     static void toggleFrameStepper();
 
+    static void showcaseBeginAttempt();
+
     Mod* mod = geode::Mod::get();
     geode::Popup* layer = nullptr;
 
@@ -131,6 +133,24 @@ class Bot {
     bool lockDeltaUseVisualUpdates = true;
     int lockDeltaMaxUpr = 10;
     bool stopPlaying = false;
+
+    // Attempts Showcase: cached settings (see Settings::loadRuntimeState)
+    bool showcaseEnabled = false;
+    double showcaseMinPercent = 20.0;
+    double showcaseMaxPercent = 80.0;
+    int showcaseCount = 3;
+
+    // Attempts Showcase: per-session/per-attempt runtime state. All of this
+    // stays inert (showcaseTargetFrame == -1) unless showcaseEnabled is on,
+    // so it never affects a normal playback session.
+    bool showcaseSessionActive = false;
+    int showcaseAttemptsLeft = -1;
+    int showcaseTargetFrame = -1;
+    bool showcaseTriggered = false;
+    int showcaseRetriesLeft = 0;
+    int showcaseReleaseFrame = -1;
+    int showcaseNextRetryFrame = -1;
+
     bool tpsEnabled = false;
     float tps = 240.f;
     bool clickBetweenFramesWasEnabled = false;
