@@ -282,19 +282,24 @@ class $modify(BGLHook, GJBaseGameLayer) {
             Bot::showcaseBeginAttempt();
         }
 
+        if (bot.showcaseHolding && frame >= bot.showcaseGiveUpFrame)
+            showcaseGiveUp(frame);
+
         m_fields->macroInput = true;
 
-        while (bot.currentAction < bot.replay.inputs.size() &&
-               frame >= bot.replay.inputs[bot.currentAction].frame) {
-            auto input = bot.replay.inputs[bot.currentAction];
-            if (frame != bot.respawnFrame) {
-                input.player2 = !input.player2;
+        if (!bot.showcaseHolding) {
+            while (bot.currentAction < bot.replay.inputs.size() &&
+                   frame >= bot.replay.inputs[bot.currentAction].frame) {
+                auto input = bot.replay.inputs[bot.currentAction];
+                if (frame != bot.respawnFrame) {
+                    input.player2 = !input.player2;
 
-                m_fields->queuedMacroInputs++;
-                queueButton(input.button, input.down, input.player2, 0.0);
+                    m_fields->queuedMacroInputs++;
+                    queueButton(input.button, input.down, input.player2, 0.0);
+                }
+                bot.currentAction++;
+                bot.safeMode = true;
             }
-            bot.currentAction++;
-            bot.safeMode = true;
         }
 
         bot.respawnFrame = -1;
@@ -310,7 +315,7 @@ class $modify(BGLHook, GJBaseGameLayer) {
             }
         }
 
-        if (!(bot.frameFixes || bot.inputFixes) || !PlayLayer::get())
+        if (!(bot.frameFixes || bot.inputFixes) || !PlayLayer::get() || bot.showcaseHolding)
             return;
 
         while (bot.currentFrameFix < bot.replay.frameFixes.size() &&
@@ -338,47 +343,58 @@ class $modify(BGLHook, GJBaseGameLayer) {
         }
     }
 
-    // Attempts Showcase: inserts extra jump input that isn't part of the
-    // macro, timed to land near the attempt's randomly chosen target
-    // percent. A no-op whenever the feature is off, since
-    // showcaseTargetFrame stays -1 in that case (see Bot::showcaseBeginAttempt).
+    // Attempts Showcase: instead of guessing at a single click that might
+    // cause a death, this holds an extra jump press and stops the macro
+    // from sending any further input at all - no more scheduled clicks,
+    // no more frame-fix position/velocity corrections - for the rest of
+    // the attempt. With nothing correcting the player back onto the
+    // macro's exact line, it's the level's own physics that causes the
+    // death, which is reliable across every game mode: no real GD section
+    // tolerates open-ended drift, whether that's a mistimed cube jump, a
+    // wave riding into a wall, or a ship climbing into the ceiling.
     //
-    // A single brief tap is enough to kill in most cube/ball/robot/spider
-    // sections, where any mistimed jump near an obstacle is fatal - but
-    // trajectory-based modes (wave/ship/ufo) can easily absorb one small
-    // blip in a wide corridor. So instead of one tap, this mashes jump
-    // repeatedly - each press reinforced before the last one's effect can
-    // fully settle back onto the macro's line - until either the player
-    // dies or a few seconds pass without it mattering, at which point it
-    // gives up and lets the attempt continue normally.
+    // handlePlaying's existing "player is dead" check already releases
+    // every held button and stops touching the player entirely, so death
+    // cleans this up on its own. The next attempt (Bot::showcaseBeginAttempt,
+    // called from resetLevel) turns macro control back on. If nothing
+    // kills the player within a generous window, showcaseGiveUp hands
+    // control back instead of holding forever.
     void handleShowcase(int frame) {
         auto& bot = Bot::get();
 
-        if (bot.showcaseTargetFrame < 0 || m_player1->m_isDead)
+        if (bot.showcaseTargetFrame < 0 || bot.showcaseTriggered || m_player1->m_isDead)
             return;
 
-        if (bot.showcaseReleaseFrame >= 0 && frame >= bot.showcaseReleaseFrame) {
-            m_fields->queuedMacroInputs++;
-            queueButton(1, false, false, 0.0);
-            bot.showcaseReleaseFrame = -1;
-            bot.showcaseNextRetryFrame = frame + 6;
-        }
-
-        bool dueForFirstTrigger = !bot.showcaseTriggered && frame >= bot.showcaseTargetFrame;
-        bool dueForRetry = bot.showcaseTriggered && bot.showcaseReleaseFrame < 0 &&
-                            frame < bot.showcaseGiveUpFrame && frame >= bot.showcaseNextRetryFrame;
-
-        if (!dueForFirstTrigger && !dueForRetry)
+        if (frame < bot.showcaseTargetFrame)
             return;
 
-        if (dueForFirstTrigger) {
-            bot.showcaseTriggered = true;
-            bot.showcaseGiveUpFrame = frame + 500;
-        }
+        bot.showcaseTriggered = true;
+        bot.showcaseHolding = true;
+        bot.showcaseGiveUpFrame = frame + 720;
 
         m_fields->queuedMacroInputs++;
         queueButton(1, true, false, 0.0);
-        bot.showcaseReleaseFrame = frame + 10;
+    }
+
+    // Releases the injected hold and skips currentAction/currentFrameFix
+    // ahead to the first entry due at or after the current frame, rather
+    // than resuming from wherever they were frozen - which would otherwise
+    // dump every input queued during the hold in a single tick.
+    void showcaseGiveUp(int frame) {
+        auto& bot = Bot::get();
+
+        bot.showcaseHolding = false;
+
+        m_fields->queuedMacroInputs++;
+        queueButton(1, false, false, 0.0);
+
+        while (bot.currentAction < bot.replay.inputs.size() &&
+               bot.replay.inputs[bot.currentAction].frame < frame)
+            bot.currentAction++;
+
+        while (bot.currentFrameFix < bot.replay.frameFixes.size() &&
+               bot.replay.frameFixes[bot.currentFrameFix].frame < frame)
+            bot.currentFrameFix++;
     }
 
     void handleButton(bool hold, int button, bool player2) {
