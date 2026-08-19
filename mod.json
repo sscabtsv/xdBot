@@ -222,6 +222,36 @@
 			"type": "bool",
 			"default": true
 		},
+		"attempts_showcase": {
+			"name": "Attempts Showcase",
+			"description": "For showcase recordings: fails a few natural-looking attempts near a random percent before letting the macro finish, instead of completing first try.",
+			"type": "bool",
+			"default": false
+		},
+		"attempts_showcase_min_percent": {
+			"name": "Showcase Min %",
+			"description": "Lowest percent into the level a showcase fail can happen at.",
+			"type": "float",
+			"default": 20.0,
+			"min": 0.0,
+			"max": 100.0
+		},
+		"attempts_showcase_max_percent": {
+			"name": "Showcase Max %",
+			"description": "Highest percent into the level a showcase fail can happen at.",
+			"type": "float",
+			"default": 80.0,
+			"min": 0.0,
+			"max": 100.0
+		},
+		"attempts_showcase_count": {
+			"name": "Showcase Attempts",
+			"description": "How many attempts fail near that percent range before the macro is allowed to finish.",
+			"type": "int",
+			"default": 3,
+			"min": 0,
+			"max": 50
+		},
 		"lock_delta": {
 			"name": "Lock Delta",
 			"description": "Locks the delta.",
