@@ -317,7 +317,7 @@ void Bot::showcaseBeginAttempt() {
     bot.showcaseTriggered = false;
     bot.showcaseReleaseFrame = -1;
     bot.showcaseNextRetryFrame = -1;
-    bot.showcaseRetriesLeft = 3;
+    bot.showcaseGiveUpFrame = -1;
 
     if (!bot.showcaseEnabled || bot.replay.inputs.empty()) {
         bot.showcaseAttemptsLeft = -1;
