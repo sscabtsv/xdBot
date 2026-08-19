@@ -5,7 +5,12 @@
 #include "../ui/game/game_ui.hpp"
 #include "../ui/layers/record_layer.hpp"
 
+#include <algorithm>
+#include <algorithm>
+#include <algorithm>
 #include <random>
+#include <utility>
+#include <utility>
 
 namespace {
 bool g_botBootstrapping = false;
@@ -304,6 +309,44 @@ void Bot::resetState(bool cp) {
 
     Interface::updateLabels();
     Interface::updateButtons();
+}
+
+void Bot::showcaseBeginAttempt() {
+    auto& bot = Bot::get();
+
+    bot.showcaseTriggered = false;
+    bot.showcaseReleaseFrame = -1;
+    bot.showcaseNextRetryFrame = -1;
+    bot.showcaseRetriesLeft = 3;
+
+    if (!bot.showcaseEnabled || bot.replay.inputs.empty()) {
+        bot.showcaseAttemptsLeft = -1;
+        bot.showcaseTargetFrame = -1;
+        return;
+    }
+
+    if (bot.showcaseAttemptsLeft < 0)
+        bot.showcaseAttemptsLeft = bot.showcaseCount;
+
+    if (bot.showcaseAttemptsLeft <= 0) {
+        bot.showcaseTargetFrame = -1;
+        return;
+    }
+
+    bot.showcaseAttemptsLeft--;
+
+    double minPercent = std::clamp(bot.showcaseMinPercent, 0.0, 100.0);
+    double maxPercent = std::clamp(bot.showcaseMaxPercent, 0.0, 100.0);
+    if (minPercent > maxPercent)
+        std::swap(minPercent, maxPercent);
+
+    static std::mt19937 rng{std::random_device{}()};
+    std::uniform_real_distribution<double> dist(minPercent, maxPercent);
+    double targetPercent = dist(rng);
+
+    uint64_t lastFrame = bot.replay.inputs.back().frame;
+    bot.showcaseTargetFrame =
+        std::max(static_cast<int>(static_cast<double>(lastFrame) * (targetPercent / 100.0)), 1);
 }
 
 bool Bot::shouldStep() {
