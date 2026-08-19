@@ -7,6 +7,7 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+
 $execute {
     auto* mod = Mod::get();
     geode::listenForSettingChanges<std::string>("macro_accuracy", +[](std::string value) {
@@ -61,6 +62,30 @@ $execute {
         if (Bot::isBootstrapping())
             return;
         Bot::get().stopPlaying = value;
+    }, mod);
+
+    geode::listenForSettingChanges<bool>("attempts_showcase", +[](bool value) {
+        if (Bot::isBootstrapping())
+            return;
+        Bot::get().showcaseEnabled = value;
+    }, mod);
+
+    geode::listenForSettingChanges<double>("attempts_showcase_min_percent", +[](double value) {
+        if (Bot::isBootstrapping())
+            return;
+        Bot::get().showcaseMinPercent = value;
+    }, mod);
+
+    geode::listenForSettingChanges<double>("attempts_showcase_max_percent", +[](double value) {
+        if (Bot::isBootstrapping())
+            return;
+        Bot::get().showcaseMaxPercent = value;
+    }, mod);
+
+    geode::listenForSettingChanges<int64_t>("attempts_showcase_count", +[](int64_t value) {
+        if (Bot::isBootstrapping())
+            return;
+        Bot::get().showcaseCount = static_cast<int>(value);
     }, mod);
 };
 
@@ -152,6 +177,9 @@ class $modify(PlayLayer) {
         bot.restart = false;
         bot.respawnFrame = frame;
 
+        if (bot.state == state::playing)
+            Bot::showcaseBeginAttempt();
+
         if (bot.state == state::recording)
             Bot::updateMacroInfo(this);
 
@@ -215,6 +243,8 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
         if (bot.state == state::playing)
             handlePlaying(frame);
+        else if (bot.showcaseSessionActive)
+            bot.showcaseSessionActive = false;
 
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
@@ -247,6 +277,11 @@ class $modify(BGLHook, GJBaseGameLayer) {
             return;
         }
 
+        if (!bot.showcaseSessionActive) {
+            bot.showcaseSessionActive = true;
+            Bot::showcaseBeginAttempt();
+        }
+
         m_fields->macroInput = true;
 
         while (bot.currentAction < bot.replay.inputs.size() &&
@@ -264,6 +299,8 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
         bot.respawnFrame = -1;
         m_fields->macroInput = false;
+
+        handleShowcase(frame);
 
         if (bot.currentAction == bot.replay.inputs.size()) {
             if (bot.stopPlaying) {
@@ -299,6 +336,43 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
             bot.currentFrameFix++;
         }
+    }
+
+    // Attempts Showcase: inserts an extra jump tap that isn't part of the
+    // macro, timed to land near the attempt's randomly chosen target
+    // percent. A no-op whenever the feature is off, since
+    // showcaseTargetFrame stays -1 in that case (see Bot::showcaseBeginAttempt).
+    void handleShowcase(int frame) {
+        auto& bot = Bot::get();
+
+        if (bot.showcaseTargetFrame < 0 || m_player1->m_isDead)
+            return;
+
+        if (bot.showcaseReleaseFrame >= 0 && frame >= bot.showcaseReleaseFrame) {
+            m_fields->queuedMacroInputs++;
+            queueButton(1, false, false, 0.0);
+            bot.showcaseReleaseFrame = -1;
+        }
+
+        bool dueForFirstTrigger = !bot.showcaseTriggered && frame >= bot.showcaseTargetFrame;
+        bool dueForRetry = bot.showcaseTriggered && bot.showcaseRetriesLeft > 0 &&
+                            bot.showcaseReleaseFrame < 0 && frame >= bot.showcaseNextRetryFrame;
+
+        if (!dueForFirstTrigger && !dueForRetry)
+            return;
+
+        if (dueForFirstTrigger)
+            bot.showcaseTriggered = true;
+        else
+            bot.showcaseRetriesLeft--;
+
+        // A brief, natural-feeling tap: press now, release a handful of
+        // frames later - not a scripted kill, just an extra click the
+        // macro never intended that GD's own physics resolves normally.
+        m_fields->queuedMacroInputs++;
+        queueButton(1, true, false, 0.0);
+        bot.showcaseReleaseFrame = frame + 4;
+        bot.showcaseNextRetryFrame = frame + 45;
     }
 
     void handleButton(bool hold, int button, bool player2) {
