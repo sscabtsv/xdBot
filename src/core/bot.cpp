@@ -315,8 +315,7 @@ void Bot::showcaseBeginAttempt() {
     auto& bot = Bot::get();
 
     bot.showcaseTriggered = false;
-    bot.showcaseReleaseFrame = -1;
-    bot.showcaseNextRetryFrame = -1;
+    bot.showcaseHolding = false;
     bot.showcaseGiveUpFrame = -1;
 
     if (!bot.showcaseEnabled || bot.replay.inputs.empty()) {
