@@ -297,7 +297,7 @@ void applyInitialInput(PlayLayer* pl, PlayerObject* player, PlayerObject* realPl
         break;
     }
 
-    if (!pl->m_levelSettings->m_platformerMode)
+    if (!pl->m_isPlatformer)
         return;
 
     switch (mode & (ShowTrajectory::Left | ShowTrajectory::Right)) {
@@ -679,6 +679,58 @@ void togglePlayerScaleForTrajectory(PlayerObject* player, bool smallSize) {
     player->updatePlayerScale();
 }
 
+void switchGameModeForTrajectory(PlayerObject* player, GameObjectType portalType) {
+    if (!player)
+        return;
+
+    bool wasBall = player->m_isBall;
+    bool wasFlying = player->m_isShip || player->m_isBird || player->m_isDart || player->m_isSwing;
+
+    // Every gamemode boolean gets explicitly set here, so an unrecognized
+    // or CubePortal type correctly clears all of them back to cube instead
+    // of silently falling through and leaving the previous mode's flags set.
+    player->m_isShip = portalType == GameObjectType::ShipPortal;
+    player->m_isBall = portalType == GameObjectType::BallPortal;
+    player->m_isBird = portalType == GameObjectType::UfoPortal;
+    player->m_isDart = portalType == GameObjectType::WavePortal;
+    player->m_isRobot = portalType == GameObjectType::RobotPortal;
+    player->m_isSpider = portalType == GameObjectType::SpiderPortal;
+    player->m_isSwing = portalType == GameObjectType::SwingPortal;
+
+    bool nowFlying = player->m_isShip || player->m_isBird || player->m_isDart || player->m_isSwing;
+
+    clearCollisionState(player);
+    player->m_isOnGround = false;
+    player->m_isOnGround2 = false;
+    player->m_isOnSlope = false;
+    player->m_wasOnSlope = false;
+    player->m_isAccelerating = false;
+
+    if (!player->m_isBall && !player->m_isLocked && !player->m_isDashing) {
+        player->m_isRotating = false;
+        player->m_isBallRotating2 = false;
+        player->m_isBallRotating = false;
+        player->m_rotationSpeed = 0.0;
+        player->runNormalRotation(0, 1.0);
+    } else {
+        player->runBallRotation2();
+    }
+
+    if (player->m_isBall && !wasBall)
+        player->runBallRotation2();
+
+    // Matches how GD caps vertical speed when a fall/rise carries you into
+    // a flying mode mid-air; ground modes keep whatever velocity they had,
+    // the next physics step settles it against the ground normally.
+    if (nowFlying && !wasFlying)
+        player->m_yVelocity = std::clamp(player->m_yVelocity, -8.0, 8.0);
+
+    if (player->m_isSpider)
+        spiderTestJumpForTrajectory(player);
+
+    player->m_lastGroundedPos = player->getPosition();
+}
+
 void activatePortalForTrajectory(GJBaseGameLayer* layer, PlayerObject* player, EffectGameObject* portal) {
     if (!layer || !player || !portal || !layer->canBeActivatedByPlayer(player, portal))
         return;
@@ -687,32 +739,7 @@ void activatePortalForTrajectory(GJBaseGameLayer* layer, PlayerObject* player, E
 
     cocos2d::CCPoint position = player->getPosition();
     player->switchedToMode(portal->m_objectType);
-
-    switch (portal->m_objectType) {
-    case GameObjectType::ShipPortal:
-        player->toggleFlyMode(true, true);
-        break;
-    case GameObjectType::BallPortal:
-        player->toggleRollMode(true, true);
-        break;
-    case GameObjectType::UfoPortal:
-        player->toggleBirdMode(true, true);
-        break;
-    case GameObjectType::WavePortal:
-        player->toggleDartMode(true, true);
-        break;
-    case GameObjectType::SpiderPortal:
-        player->toggleSpiderMode(true, true);
-        break;
-    case GameObjectType::SwingPortal:
-        player->toggleSwingMode(true, true);
-        break;
-    case GameObjectType::RobotPortal:
-        player->toggleRobotMode(true, true);
-        break;
-    default:
-        break;
-    }
+    switchGameModeForTrajectory(player, portal->m_objectType);
 
     player->setPosition(position);
     if (player->m_iconSprite)
